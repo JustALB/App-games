@@ -34,6 +34,7 @@ const echoColors = ['#5de4de', '#b68cff', '#f08baf'];
 
 export default function App() {
   const { width, height } = useWindowDimensions();
+  const [selectedLevel, setSelectedLevel] = useState(0);
   const [phase, setPhase] = useState<Phase>('intro');
   const [game, setGame] = useState(() => createInitialState(0));
 
@@ -46,7 +47,7 @@ export default function App() {
   const timeExpired = game.turn >= currentTurnLimit;
 
   const startGame = () => {
-    setGame(createInitialState(0));
+    setGame(createInitialState(selectedLevel));
     setPhase('briefing');
   };
 
@@ -84,10 +85,22 @@ export default function App() {
             <Text style={styles.eyebrow}>DAS ARCHIV ERINNERT SICH</Text>
             <Text style={styles.logo}>ECHO{`\n`}MAZE</Text>
             <Text style={styles.tagline}>Löse das Labyrinth mit den Bewegungen deiner Vergangenheit.</Text>
+            <View style={styles.levelPicker}>
+              <Pressable onPress={() => setSelectedLevel((value) => (value + CHAMBERS.length - 1) % CHAMBERS.length)} style={styles.pickerButton}>
+                <Text style={styles.pickerArrow}>‹</Text>
+              </Pressable>
+              <View style={styles.pickerCenter}>
+                <Text style={styles.pickerIndex}>KAMMER {String(selectedLevel + 1).padStart(2, '0')} / {CHAMBERS.length}</Text>
+                <Text style={styles.pickerName}>{CHAMBERS[selectedLevel].name}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedLevel((value) => (value + 1) % CHAMBERS.length)} style={styles.pickerButton}>
+                <Text style={styles.pickerArrow}>›</Text>
+              </Pressable>
+            </View>
             <View style={styles.featureLine}>
               <Feature number="01" text="Zeichne einen Weg auf" />
               <Feature number="02" text="Erschaffe dein Echo" />
-              <Feature number="03" text="Überliste die Zeit" />
+              <Feature number="30" text="Einzigartige Kammern" />
             </View>
             <Pressable onPress={startGame} style={styles.primaryButton}>
               <Text style={styles.primaryText}>ERINNERUNG BEGINNEN</Text>
@@ -100,7 +113,7 @@ export default function App() {
           <ScrollView contentContainerStyle={styles.gameScreen} bounces={false}>
             <View style={styles.header}>
               <View>
-                <Text style={styles.chapter}>KAMMER {String(game.chamber.id).padStart(2, '0')} / 03</Text>
+                <Text style={styles.chapter}>KAMMER {String(game.chamber.id).padStart(2, '0')} / {CHAMBERS.length} · {game.chamber.tier}</Text>
                 <Text style={styles.title}>{game.chamber.name}</Text>
               </View>
               <Pressable onPress={() => setPhase('intro')} style={styles.smallButton}>
@@ -147,7 +160,8 @@ export default function App() {
                       const openGate =
                         (tile === 'A' && activePlates.has('a')) ||
                         (tile === 'X' && activePlates.has('a') && activePlates.has('b')) ||
-                        (tile === 'Z' && activePlates.has('a') && activePlates.has('b') && activePlates.has('c'));
+                        (tile === 'Z' && activePlates.has('a') && activePlates.has('b') && activePlates.has('c')) ||
+                        (tile === 'Q' && !isPulseActive(game.turn + 1));
                       return (
                         <View
                           key={key}
@@ -156,7 +170,7 @@ export default function App() {
                             { width: cellSize, height: cellSize },
                             tile === '#' ? styles.wall : styles.floor,
                             (tile === 'a' || tile === 'b' || tile === 'c') && styles.plate,
-                            (tile === 'A' || tile === 'X' || tile === 'Z') && !openGate && styles.gate,
+                            (tile === 'A' || tile === 'X' || tile === 'Z' || tile === 'Q') && !openGate && styles.gate,
                             openGate && styles.openGate,
                             tile === '~' && styles.fragile,
                             tile === '^' && (isPulseActive(game.turn + 1) ? styles.pulseHot : styles.pulseSafe),
@@ -184,6 +198,7 @@ export default function App() {
               <Legend symbol="◉" text="Platte" color="#d5a95f" />
               <Legend symbol="╳" text="Bruch" color="#cc7b65" />
               <Legend symbol="△" text="Impuls" color="#e87878" />
+              <Legend symbol="▥" text="Takttor" color="#b68cff" />
             </View>
 
             <Text style={styles.guidance}>
@@ -270,7 +285,7 @@ export default function App() {
             <Text style={styles.victoryEchoes}>◇ ◇ ◆ ◇ ◇</Text>
             <Text style={styles.modalIndex}>DAS ARCHIV IST VOLLSTÄNDIG</Text>
             <Text style={styles.victoryTitle}>Du hast mit deiner Vergangenheit zusammengearbeitet.</Text>
-            <Text style={styles.victoryText}>Drei Kammern. Sechs gespeicherte Vergangenheiten. Kein einziges Quiz.</Text>
+            <Text style={styles.victoryText}>30 Kammern. 66 Pflicht-Tore. Keine Abkürzung durch die Zeit.</Text>
             <Pressable onPress={startGame} style={styles.primaryButton}>
               <Text style={styles.primaryText}>ERNEUT EINTRETEN</Text><Text style={styles.primaryArrow}>↻</Text>
             </Pressable>
@@ -287,6 +302,7 @@ function tileSymbol(tile: Tile, open: boolean, collapsed: boolean, turn: number)
   if (tile === 'b') return 'Ⅱ';
   if (tile === 'c') return 'Ⅲ';
   if (tile === 'A' || tile === 'X' || tile === 'Z') return open ? '┆' : '║';
+  if (tile === 'Q') return open ? '┆' : '▥';
   if (tile === '~') return '╳';
   if (tile === '^') return isPulseActive(turn + 1) ? '▲' : '△';
   if (tile === 'E') return '✦';
@@ -319,7 +335,13 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#5dded8', fontSize: 10, fontWeight: '900', letterSpacing: 3.5 },
   logo: { color: '#f5eddf', fontSize: 52, lineHeight: 48, fontWeight: '900', letterSpacing: 7, textAlign: 'center', marginTop: 11 },
   tagline: { color: '#97a6ba', fontSize: 15, lineHeight: 23, maxWidth: 360, textAlign: 'center', marginTop: 20 },
-  featureLine: { width: '100%', maxWidth: 430, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#25344a', marginVertical: 34, paddingVertical: 18 },
+  levelPicker: { width: '100%', maxWidth: 410, minHeight: 58, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#2d4059', backgroundColor: '#091321', marginTop: 22 },
+  pickerButton: { width: 52, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', backgroundColor: '#101d2e' },
+  pickerArrow: { color: '#6edbd5', fontSize: 30, lineHeight: 32 },
+  pickerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  pickerIndex: { color: '#b58aee', fontSize: 9, fontWeight: '900', letterSpacing: 1.8 },
+  pickerName: { color: '#e8dfd1', fontSize: 13, fontWeight: '800', marginTop: 5, textAlign: 'center' },
+  featureLine: { width: '100%', maxWidth: 430, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#25344a', marginVertical: 22, paddingVertical: 15 },
   feature: { flex: 1, alignItems: 'center', paddingHorizontal: 5 },
   featureNumber: { color: '#b58aee', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
   featureText: { color: '#8290a4', fontSize: 10, lineHeight: 14, textAlign: 'center', marginTop: 7 },

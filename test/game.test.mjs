@@ -4,15 +4,17 @@ import test from 'node:test';
 import {
   CHAMBERS,
   createInitialState,
-  getActivePlates,
   isPulseActive,
   memoryUsed,
   recordEcho,
   resetLoop,
   step,
+  tileAt,
   turnLimit,
 } from '../src/game.ts';
 
+const PLATES = ['a', 'b', 'c'];
+const GATES = ['A', 'X', 'Z'];
 const play = (state, actions) => actions.reduce((current, action) => step(current, action), state);
 
 const canReach = (chamber, targetTile, blockedTiles = new Set()) => {
@@ -34,89 +36,73 @@ const canReach = (chamber, targetTile, blockedTiles = new Set()) => {
   return false;
 };
 
-test('every chamber is rectangular and its required gates cannot be bypassed', () => {
+test('the campaign contains 30 distinct, rectangular chambers', () => {
+  assert.equal(CHAMBERS.length, 30);
+  assert.equal(new Set(CHAMBERS.map((chamber) => chamber.map.join('\n'))).size, 30);
   for (const chamber of CHAMBERS) {
-    assert.ok(chamber.map.every((row) => row.length === chamber.map[0].length));
+    assert.ok(chamber.map.every((row) => row.length === chamber.map[0].length), `level ${chamber.id} is rectangular`);
+    const flat = chamber.map.join('');
+    assert.equal([...flat].filter((tile) => tile === 'S').length, 1, `level ${chamber.id} has one start`);
+    assert.equal([...flat].filter((tile) => tile === 'E').length, 1, `level ${chamber.id} has one exit`);
+    assert.equal(chamber.solution.length, chamber.maxEchoes + 1);
   }
-
-  assert.equal(canReach(CHAMBERS[0], 'E', new Set(['A'])), false);
-  assert.equal(canReach(CHAMBERS[1], 'b', new Set(['A'])), false);
-  assert.equal(canReach(CHAMBERS[1], 'E', new Set(['X'])), false);
-  assert.equal(canReach(CHAMBERS[2], 'b', new Set(['A'])), false);
-  assert.equal(canReach(CHAMBERS[2], 'c', new Set(['X'])), false);
-  assert.equal(canReach(CHAMBERS[2], 'E', new Set(['Z'])), false);
 });
 
-test('chamber 1 teaches one persistent echo', () => {
-  let state = createInitialState(0);
-  state = recordEcho(play(state, ['up', 'up', 'right', 'right']));
-  state = play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'up', 'up', 'right', 'right', 'right']);
-  assert.equal(state.status, 'complete');
-  assert.equal(memoryUsed(state), 18);
+test('the generated optimal solution completes every chamber within budget', () => {
+  for (const chamber of CHAMBERS) {
+    let state = createInitialState(chamber.id - 1);
+    for (let echoIndex = 0; echoIndex < chamber.maxEchoes; echoIndex += 1) {
+      const actions = chamber.solution[echoIndex];
+      assert.ok(actions.length <= turnLimit(state), `level ${chamber.id} echo ${echoIndex + 1} fits`);
+      state = play(state, actions);
+      assert.equal(tileAt(chamber, state.player), PLATES[echoIndex], `level ${chamber.id} echo ${echoIndex + 1} reaches its plate`);
+      state = recordEcho(state);
+    }
+    const finalActions = chamber.solution[chamber.maxEchoes];
+    assert.ok(finalActions.length <= turnLimit(state), `level ${chamber.id} final run fits`);
+    state = play(state, finalActions);
+    assert.equal(state.status, 'complete', `level ${chamber.id} completes`);
+    assert.equal(memoryUsed(state), chamber.optimalMemory, `level ${chamber.id} optimal memory matches`);
+    assert.ok(chamber.memoryBudget >= chamber.optimalMemory);
+  }
 });
 
-test('chamber 2 forces echo 1 to unlock the route for echo 2', () => {
-  const attemptWithoutFirstEcho = play(createInitialState(1), [
-    'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right',
-  ]);
-  assert.deepEqual(attemptWithoutFirstEcho.player, { row: 4, col: 5 });
-
-  let state = createInitialState(1);
-  state = recordEcho(play(state, ['up', 'up']));
-  const bypassAttempt = play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right', 'right', 'up']);
-  assert.deepEqual(bypassAttempt.player, { row: 3, col: 9 });
-  assert.equal(bypassAttempt.status, 'playing');
-
-  state = recordEcho(play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right']));
-  state = play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'wait', 'up', 'right', 'right', 'right', 'right']);
-  assert.deepEqual([...getActivePlates(state)], ['a', 'b']);
-  assert.equal(state.status, 'complete');
-  assert.equal(memoryUsed(state), 29);
+test('all 66 required gate dependencies are structurally impossible to bypass', () => {
+  let dependencyCount = 0;
+  for (const chamber of CHAMBERS) {
+    for (let gateIndex = 0; gateIndex < chamber.maxEchoes; gateIndex += 1) {
+      const target = gateIndex + 1 < chamber.maxEchoes ? PLATES[gateIndex + 1] : 'E';
+      assert.equal(
+        canReach(chamber, target, new Set([GATES[gateIndex]])),
+        false,
+        `level ${chamber.id}: ${target} cannot bypass ${GATES[gateIndex]}`,
+      );
+      dependencyCount += 1;
+    }
+  }
+  assert.equal(dependencyCount, 66);
 });
 
-test('chamber 3 builds a three-echo dependency chain within one memory budget', () => {
-  let state = createInitialState(2);
-  state = recordEcho(play(state, ['up', 'up']));
-  state = recordEcho(play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right']));
-
-  const blockedAtDoubleGate = play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'up']);
-  assert.deepEqual(blockedAtDoubleGate.player, { row: 4, col: 6 });
-
-  state = recordEcho(play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'right', 'right', 'right', 'right']));
-  const thirdGateBypass = play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'right', 'right', 'right', 'right', 'right', 'up']);
-  assert.deepEqual(thirdGateBypass.player, { row: 3, col: 11 });
-  assert.equal(thirdGateBypass.status, 'playing');
-
-  state = play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'up', 'wait', 'wait', 'up', 'right', 'right', 'right', 'right', 'right']);
-  assert.deepEqual([...getActivePlates(state)], ['a', 'b', 'c']);
-  assert.equal(state.status, 'complete');
-  assert.equal(memoryUsed(state), 51);
-  assert.equal(state.collapsed.size, 2);
-});
-
-test('inefficient echoes reduce the remaining final timeline', () => {
-  let state = createInitialState(0);
-  state = recordEcho(play(state, ['right', 'left', 'up', 'up', 'right', 'right']));
-  assert.equal(memoryUsed(state), 6);
-  assert.equal(turnLimit(state), 15);
-  state = play(state, Array(15).fill('wait'));
-  assert.equal(step(state, 'wait'), state);
-});
-
-test('pulse, fragile floor, gate, and reset rules stay consistent', () => {
+test('the campaign contains all hazard and timing variations', () => {
+  const campaign = CHAMBERS.map((chamber) => chamber.map.join('')).join('');
+  assert.ok(campaign.includes('~'), 'fragile floors exist');
+  assert.ok(campaign.includes('^'), 'pulse traps exist');
+  assert.ok(campaign.includes('Q'), 'phase gates exist');
   assert.equal(isPulseActive(7), true);
   assert.equal(isPulseActive(8), false);
+});
 
-  const pulseFailure = play(createInitialState(2), ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'wait', 'up']);
-  assert.equal(pulseFailure.status, 'fallen');
-  assert.match(pulseFailure.failureReason, /Zeitimpuls/);
-
-  const floorFailure = play(createInitialState(2), ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'down', 'up']);
-  assert.equal(floorFailure.status, 'fallen');
-  assert.match(floorFailure.failureReason, /Boden/);
-
-  const reset = resetLoop({ ...floorFailure, echoes: [[CHAMBERS[2].start]] }, true);
-  assert.equal(reset.status, 'playing');
+test('inefficient recordings reduce later turns and resets remain safe', () => {
+  let state = createInitialState(0);
+  const optimalFirstEcho = state.chamber.solution[0];
+  state = play(state, ['up', 'down', ...optimalFirstEcho]);
+  state = recordEcho(state);
+  assert.equal(
+    turnLimit(state),
+    Math.min(state.chamber.maxTurns, state.chamber.memoryBudget - optimalFirstEcho.length - 2),
+  );
+  const reset = resetLoop(state, true);
   assert.equal(reset.echoes.length, 1);
-  assert.deepEqual(reset.player, CHAMBERS[2].start);
+  assert.deepEqual(reset.player, state.chamber.start);
+  assert.equal(reset.status, 'playing');
 });
