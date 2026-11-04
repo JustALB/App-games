@@ -25,6 +25,7 @@ import {
   resetLoop,
   step,
   Tile,
+  tileAt,
   turnLimit,
 } from './src/game';
 
@@ -48,6 +49,19 @@ export default function App() {
   const echoCycleRemaining = game.chamber.echoCycleLength
     ? game.chamber.echoCycleLength - (game.turn % game.chamber.echoCycleLength)
     : null;
+  const nextPlates = getActivePlates(game, game.player, game.turn + 1);
+  const lockedGateNearby = [
+    { row: game.player.row - 1, col: game.player.col },
+    { row: game.player.row + 1, col: game.player.col },
+    { row: game.player.row, col: game.player.col - 1 },
+    { row: game.player.row, col: game.player.col + 1 },
+  ].some((point) => {
+    const tile = tileAt(game.chamber, point);
+    if (tile === 'A') return !nextPlates.has('a');
+    if (tile === 'X') return !nextPlates.has('a') || !nextPlates.has('b');
+    if (tile === 'Z') return !nextPlates.has('a') || !nextPlates.has('b') || !nextPlates.has('c');
+    return false;
+  });
 
   const startGame = () => {
     setGame(createInitialState(selectedLevel));
@@ -204,17 +218,21 @@ export default function App() {
               <Legend symbol="▥" text="Takttor" color="#b68cff" />
             </View>
 
-            <Text style={styles.guidance}>
+            <Text style={[styles.guidance, lockedGateNearby && styles.syncGuidance]}>
               {timeExpired
                 ? 'Kein Zug bleibt übrig. Kürzere Echo-Wege geben der finalen Zeitlinie mehr Raum.'
-                : game.chamber.lesson}
+                : lockedGateNearby
+                  ? game.chamber.allowWait
+                    ? 'TOR WARTET AUF EIN ECHO · Nutze ⧖ oder bewege dich, um die gemeinsame Zeit voranzutreiben.'
+                    : 'TOR WARTET AUF EIN ECHO · Stillstand ist gesperrt. Nutze eine Seitennische oder gehe kurz zurück.'
+                  : game.chamber.lesson}
             </Text>
 
             <View style={styles.controlArea}>
               <View style={styles.dpad}>
                 <MoveButton label="↑" onPress={() => perform('up')} style={styles.up} />
                 <MoveButton label="←" onPress={() => perform('left')} style={styles.left} />
-                <MoveButton label="⧖" onPress={() => perform('wait')} style={styles.wait} special />
+                <MoveButton label={game.chamber.allowWait ? '⧖' : '×'} onPress={() => perform('wait')} style={styles.wait} special disabled={!game.chamber.allowWait} />
                 <MoveButton label="→" onPress={() => perform('right')} style={styles.right} />
                 <MoveButton label="↓" onPress={() => perform('down')} style={styles.down} />
               </View>
@@ -245,7 +263,7 @@ export default function App() {
             <Text style={styles.modalTitle}>{game.chamber.name}</Text>
             <Text style={styles.modalSubtitle}>{game.chamber.subtitle}</Text>
             <View style={styles.briefingRule}><Text style={styles.briefingRuleText}>{game.chamber.lesson}</Text></View>
-            <Text style={styles.briefingMeta}>{game.chamber.memoryBudget} GESAMTZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}{game.chamber.echoCycleLength ? ` · ${game.chamber.echoCycleLength}ER RÜCKLAUF` : ''}</Text>
+            <Text style={styles.briefingMeta}>{game.chamber.memoryBudget} GESAMTZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}{game.chamber.echoCycleLength ? ` · ${game.chamber.echoCycleLength}ER RÜCKLAUF` : ''}{game.chamber.allowWait ? '' : ' · KEIN STILLSTAND'}</Text>
             <Pressable onPress={() => setPhase('playing')} style={styles.primaryButton}>
               <Text style={styles.primaryText}>KAMMER BETRETEN</Text><Text style={styles.primaryArrow}>→</Text>
             </Pressable>
@@ -321,8 +339,8 @@ function Legend({ symbol, text, color }: { symbol: string; text: string; color: 
   return <View style={styles.legendItem}><Text style={[styles.legendSymbol, { color }]}>{symbol}</Text><Text style={styles.legendText}>{text}</Text></View>;
 }
 
-function MoveButton({ label, onPress, style, special = false }: { label: string; onPress: () => void; style: object; special?: boolean }) {
-  return <Pressable onPress={onPress} style={({ pressed }) => [styles.moveButton, style, special && styles.waitButton, pressed && styles.pressed]}><Text style={[styles.moveText, special && styles.waitText]}>{label}</Text></Pressable>;
+function MoveButton({ label, onPress, style, special = false, disabled = false }: { label: string; onPress: () => void; style: object; special?: boolean; disabled?: boolean }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={special ? 'Zeit abwarten' : `Bewegen ${label}`} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.moveButton, style, special && styles.waitButton, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.moveText, special && styles.waitText]}>{label}</Text></Pressable>;
 }
 
 const styles = StyleSheet.create({
@@ -395,6 +413,7 @@ const styles = StyleSheet.create({
   legendSymbol: { fontSize: 14, fontWeight: '900' },
   legendText: { color: '#6f7f94', fontSize: 9 },
   guidance: { maxWidth: 420, color: '#94a2b5', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 12, minHeight: 35 },
+  syncGuidance: { color: '#e2bd79', fontWeight: '800' },
   controlArea: { width: '100%', maxWidth: 440, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18, marginTop: 8 },
   dpad: { width: 156, height: 156, position: 'relative' },
   moveButton: { position: 'absolute', width: 48, height: 48, backgroundColor: '#111c2c', borderWidth: 1, borderColor: '#35465e', alignItems: 'center', justifyContent: 'center', borderRadius: 3 },

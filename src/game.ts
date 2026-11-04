@@ -11,6 +11,7 @@ export type Chamber = {
   tier: string;
   echoMode: 'hold' | 'cycle';
   echoCycleLength: number | null;
+  allowWait: boolean;
   map: string[];
   maxTurns: number;
   maxEchoes: number;
@@ -109,6 +110,7 @@ export const turnLimit = (state: GameState) =>
 
 export function step(state: GameState, action: Action): GameState {
   if (state.status !== 'playing' || state.turn >= turnLimit(state)) return state;
+  if (action === 'wait' && !state.chamber.allowWait) return state;
   const delta = DELTAS[action];
   const target = { row: state.player.row + delta.row, col: state.player.col + delta.col };
   const targetTile = tileAt(state.chamber, target);
@@ -215,6 +217,7 @@ const levelNames = [
 const hazardPatterns: Array<Array<'~' | '^' | 'Q'>> = [
   [], ['~'], ['^'], ['Q'], ['~', '^'], ['Q', '~'], ['^', 'Q'], ['~', 'Q', '^'],
 ];
+const NO_WAIT_LEVELS = new Set([7, 8, 9, 10, 13, 15, 16, 18, 20, 23, 24, 25, 26, 27, 28, 30]);
 
 const createSpec = (name: string, index: number): ChamberSpec => {
   const id = index + 1;
@@ -234,7 +237,7 @@ const createSpec = (name: string, index: number): ChamberSpec => {
     directions,
     branchLengths,
     hazards: pattern.slice(0, Math.min(pattern.length, 1 + Math.floor(id / 8))),
-    decoys: Math.min(2, Math.floor((id - 1) / 10)),
+    decoys: id < 7 ? 0 : id < 19 ? 1 : 2,
     memorySlack,
   };
 };
@@ -281,14 +284,17 @@ const buildChamber = (spec: ChamberSpec): Chamber => {
   const hazardText = spec.hazards.length ? ' Taktfelder und brüchige Schritte verändern die kürzeste Route.' : '';
   const echoCycleLength = spec.id < 11 ? null : spec.echoes === 2 ? 10 : DEFAULT_ECHO_CYCLE_LENGTH;
   const cycleText = echoCycleLength ? ` Nach ${echoCycleLength} Zügen springen alle Echos an den Anfang ihrer Spur zurück.` : '';
+  const allowWait = !NO_WAIT_LEVELS.has(spec.id);
+  const movementText = allowWait ? '' : ' Stillstand ist instabil: Nutze Seitennischen und Rückwege, um Echos zu synchronisieren.';
   const base: Chamber = {
     id: spec.id,
     name: spec.name,
     subtitle: spec.echoes === 1 ? 'Eine Spur formt den Weg.' : spec.echoes === 2 ? 'Die zweite Spur braucht die erste.' : 'Jede Vergangenheit öffnet die nächste.',
-    lesson: `${spec.echoes === 1 ? 'Platziere dein Echo auf Platte Ⅰ.' : `Baue die Torkette ${PLATES.slice(0, spec.echoes).map((_, i) => ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]).join(' → ')} in der richtigen Reihenfolge.`}${hazardText}${cycleText}`,
+    lesson: `${spec.echoes === 1 ? 'Platziere dein Echo auf Platte Ⅰ.' : `Baue die Torkette ${PLATES.slice(0, spec.echoes).map((_, i) => ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]).join(' → ')} in der richtigen Reihenfolge.`}${hazardText}${cycleText}${movementText}`,
     tier,
     echoMode: spec.id >= 11 ? 'cycle' : 'hold',
     echoCycleLength,
+    allowWait,
     map: grid.map((row) => row.join('')),
     maxTurns: 80,
     maxEchoes: spec.echoes,

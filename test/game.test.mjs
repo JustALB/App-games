@@ -116,6 +116,24 @@ test('cycle echoes rewind together and replay their recorded route', () => {
   assert.deepEqual([...getActivePlates(state)], [], 'the rewind closes both echo plates together');
 });
 
+test('movement-only chambers require real synchronization detours', () => {
+  const movementOnly = CHAMBERS.filter((chamber) => !chamber.allowWait);
+  assert.equal(movementOnly.length, 16);
+  const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
+  let reversals = 0;
+  for (const chamber of movementOnly) {
+    assert.ok(chamber.solution.every((run) => !run.includes('wait')), `level ${chamber.id} does not stand still`);
+    for (const run of chamber.solution) {
+      for (let index = 1; index < run.length; index += 1) {
+        if (opposite[run[index - 1]] === run[index]) reversals += 1;
+      }
+    }
+    const state = createInitialState(chamber.id - 1);
+    assert.equal(step(state, 'wait'), state, `level ${chamber.id} rejects waiting`);
+  }
+  assert.ok(reversals >= movementOnly.length, 'solutions use deliberate backtracking to advance echo time');
+});
+
 test('inefficient recordings reduce later turns and resets remain safe', () => {
   let state = createInitialState(0);
   const optimalFirstEcho = state.chamber.solution[0];
