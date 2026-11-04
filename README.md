@@ -1,6 +1,6 @@
-# App Games
+# Mind Maze: Die Archive
 
-Mobile game playground built with Expo, React Native, and TypeScript.
+A mobile maze game where every route challenges both orientation and reasoning.
 
 ## Development
 
@@ -15,5 +15,6 @@ Use `npm run android`, `npm run ios`, or `npm run web` for a specific target.
 
 ```sh
 npm run typecheck
+npm test
 npm run export:web
 ```
