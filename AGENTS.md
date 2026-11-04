@@ -6,7 +6,7 @@ Mind Maze: Die Archive is a portrait-first mobile maze game. The player explores
 
 The first playable version is called "Das erste Archiv". Each run creates a new solvable maze and places three puzzle seals on the guaranteed route. Wrong answers count as mistakes; hints are optional; completing the maze shows a run summary.
 
-The public test build is deployed from `main` to <https://justalb.github.io/App-games/> by `.github/workflows/deploy-pages.yml`.
+The public test build is committed under `docs/` and served at <https://raw.githack.com/JustALB/App-games/main/docs/index.html>. Regenerate it with `npm run export:web`, copy the contents of `dist/` to `docs/`, and change root-relative asset paths in `docs/index.html` to `./` paths before committing.
 
 ## Technical direction
 
