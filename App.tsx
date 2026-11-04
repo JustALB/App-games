@@ -16,65 +16,49 @@ import {
   Action,
   CHAMBERS,
   createInitialState,
-  createSealPuzzle,
   getActivePlates,
   getEchoPositions,
   isPulseActive,
+  memoryUsed,
   pointKey,
   recordEcho,
   resetLoop,
-  SealPuzzle,
   step,
   Tile,
+  turnLimit,
 } from './src/game';
 
-type Phase = 'intro' | 'briefing' | 'playing' | 'seal' | 'victory';
+type Phase = 'intro' | 'briefing' | 'playing' | 'complete' | 'victory';
 
-const echoColors = ['#5de4de', '#b68cff'];
+const echoColors = ['#5de4de', '#b68cff', '#f08baf'];
 
 export default function App() {
   const { width, height } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('intro');
   const [game, setGame] = useState(() => createInitialState(0));
-  const [seal, setSeal] = useState<SealPuzzle | null>(null);
-  const [wrongAnswer, setWrongAnswer] = useState<string | null>(null);
-  const [showHint, setShowHint] = useState(false);
-  const [sealMistakes, setSealMistakes] = useState(0);
 
   const boardWidth = Math.min(width - 24, height < 700 ? 340 : 420);
   const cellSize = Math.floor(boardWidth / game.chamber.map[0].length);
   const echoPositions = getEchoPositions(game);
   const activePlates = getActivePlates(game);
-  const timeExpired = game.turn >= game.chamber.maxTurns;
+  const currentTurnLimit = turnLimit(game);
+  const usedMemory = memoryUsed(game);
+  const timeExpired = game.turn >= currentTurnLimit;
 
   const startGame = () => {
     setGame(createInitialState(0));
-    setSealMistakes(0);
     setPhase('briefing');
   };
 
   const perform = (action: Action) => {
     const next = step(game, action);
     setGame(next);
-    if (next.status === 'complete') {
-      setSeal(createSealPuzzle(next.chamber.id, Date.now()));
-      setWrongAnswer(null);
-      setShowHint(false);
-      setPhase('seal');
-    }
+    if (next.status === 'complete') setPhase('complete');
   };
 
   const saveEcho = () => setGame(recordEcho(game));
 
-  const answerSeal = (answer: string) => {
-    if (!seal) return;
-    if (answer !== seal.answer) {
-      setWrongAnswer(answer);
-      setSealMistakes((value) => value + 1);
-      return;
-    }
-    setWrongAnswer(null);
-    setShowHint(false);
+  const continueAfterChamber = () => {
     if (game.chamber.id === CHAMBERS.length) {
       setPhase('victory');
       return;
@@ -127,10 +111,10 @@ export default function App() {
             <View style={styles.timelineCard}>
               <View style={styles.timelineHeader}>
                 <Text style={styles.timelineLabel}>AKTUELLE ZEITLINIE</Text>
-                <Text style={[styles.turnCount, timeExpired && styles.danger]}>{game.turn} / {game.chamber.maxTurns}</Text>
+                <Text style={[styles.turnCount, timeExpired && styles.danger]}>{game.turn} / {currentTurnLimit}</Text>
               </View>
               <View style={styles.timeline}>
-                {Array.from({ length: game.chamber.maxTurns }).map((_, index) => (
+                {Array.from({ length: currentTurnLimit }).map((_, index) => (
                   <View key={index} style={[styles.tick, index < game.turn && styles.tickPast, index === game.turn && styles.tickNow]} />
                 ))}
               </View>
@@ -141,6 +125,10 @@ export default function App() {
                     <Text style={styles.echoStatusText}>ECHO {index + 1} {game.echoes[index] ? 'AKTIV' : 'LEER'}</Text>
                   </View>
                 ))}
+              </View>
+              <View style={styles.memoryRow}>
+                <Text style={styles.memoryLabel}>GESAMTERINNERUNG</Text>
+                <Text style={styles.memoryValue}>{usedMemory} / {game.chamber.memoryBudget}</Text>
               </View>
             </View>
 
@@ -158,7 +146,8 @@ export default function App() {
                       const collapsed = game.collapsed.has(key);
                       const openGate =
                         (tile === 'A' && activePlates.has('a')) ||
-                        (tile === 'X' && activePlates.has('a') && activePlates.has('b'));
+                        (tile === 'X' && activePlates.has('a') && activePlates.has('b')) ||
+                        (tile === 'Z' && activePlates.has('a') && activePlates.has('b') && activePlates.has('c'));
                       return (
                         <View
                           key={key}
@@ -166,8 +155,8 @@ export default function App() {
                             styles.cell,
                             { width: cellSize, height: cellSize },
                             tile === '#' ? styles.wall : styles.floor,
-                            (tile === 'a' || tile === 'b') && styles.plate,
-                            (tile === 'A' || tile === 'X') && !openGate && styles.gate,
+                            (tile === 'a' || tile === 'b' || tile === 'c') && styles.plate,
+                            (tile === 'A' || tile === 'X' || tile === 'Z') && !openGate && styles.gate,
                             openGate && styles.openGate,
                             tile === '~' && styles.fragile,
                             tile === '^' && (isPulseActive(game.turn + 1) ? styles.pulseHot : styles.pulseSafe),
@@ -199,7 +188,7 @@ export default function App() {
 
             <Text style={styles.guidance}>
               {timeExpired
-                ? 'Die Erinnerung ist voll. Speichere sie als Echo oder starte diese Schleife neu.'
+                ? 'Kein Zug bleibt übrig. Kürzere Echo-Wege geben der finalen Zeitlinie mehr Raum.'
                 : game.chamber.lesson}
             </Text>
 
@@ -238,7 +227,7 @@ export default function App() {
             <Text style={styles.modalTitle}>{game.chamber.name}</Text>
             <Text style={styles.modalSubtitle}>{game.chamber.subtitle}</Text>
             <View style={styles.briefingRule}><Text style={styles.briefingRuleText}>{game.chamber.lesson}</Text></View>
-            <Text style={styles.briefingMeta}>{game.chamber.maxTurns} ZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}</Text>
+            <Text style={styles.briefingMeta}>{game.chamber.memoryBudget} GESAMTZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}</Text>
             <Pressable onPress={() => setPhase('playing')} style={styles.primaryButton}>
               <Text style={styles.primaryText}>KAMMER BETRETEN</Text><Text style={styles.primaryArrow}>→</Text>
             </Pressable>
@@ -260,24 +249,17 @@ export default function App() {
         </View>
       </Modal>
 
-      <Modal visible={phase === 'seal'} transparent animationType="fade">
+      <Modal visible={phase === 'complete'} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.sealCard}>
-            <Text style={styles.modalIndex}>SIEGEL DER KAMMER</Text>
+          <View style={styles.completeCard}>
+            <Text style={styles.modalIndex}>KAMMER SYNCHRONISIERT</Text>
             <Text style={styles.sealRune}>✦</Text>
-            <Text style={styles.sealCategory}>{seal?.category}</Text>
-            <Text style={styles.sealPrompt}>{seal?.prompt}</Text>
-            <View style={styles.answers}>
-              {seal?.options.map((option) => (
-                <Pressable key={option} onPress={() => answerSeal(option)} style={[styles.answer, wrongAnswer === option && styles.wrongAnswer]}>
-                  <Text style={styles.answerText}>{option}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {wrongAnswer && <Text style={styles.errorText}>Das Archiv widerspricht dir.</Text>}
-            {showHint ? <Text style={styles.hintText}>{seal?.hint}</Text> : (
-              <Pressable onPress={() => setShowHint(true)}><Text style={styles.hintLink}>ERINNERUNGSHILFE ANZEIGEN</Text></Pressable>
-            )}
+            <Text style={styles.modalTitle}>Das Siegel entsteht aus deinen Zeitlinien.</Text>
+            <Text style={styles.completeText}>{game.echoes.length} Echos · {game.turn} finale Züge · {usedMemory}/{game.chamber.memoryBudget} Erinnerung</Text>
+            <Pressable onPress={continueAfterChamber} style={styles.primaryButton}>
+              <Text style={styles.primaryText}>{game.chamber.id === CHAMBERS.length ? 'ARCHIV VOLLENDEN' : 'NÄCHSTE KAMMER'}</Text>
+              <Text style={styles.primaryArrow}>→</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -288,7 +270,7 @@ export default function App() {
             <Text style={styles.victoryEchoes}>◇ ◇ ◆ ◇ ◇</Text>
             <Text style={styles.modalIndex}>DAS ARCHIV IST VOLLSTÄNDIG</Text>
             <Text style={styles.victoryTitle}>Du hast mit deiner Vergangenheit zusammengearbeitet.</Text>
-            <Text style={styles.victoryText}>Drei Kammern. Drei Zeitlinien. {sealMistakes} Fehler an den Siegeln.</Text>
+            <Text style={styles.victoryText}>Drei Kammern. Sechs gespeicherte Vergangenheiten. Kein einziges Quiz.</Text>
             <Pressable onPress={startGame} style={styles.primaryButton}>
               <Text style={styles.primaryText}>ERNEUT EINTRETEN</Text><Text style={styles.primaryArrow}>↻</Text>
             </Pressable>
@@ -303,7 +285,8 @@ function tileSymbol(tile: Tile, open: boolean, collapsed: boolean, turn: number)
   if (collapsed) return '·';
   if (tile === 'a') return 'Ⅰ';
   if (tile === 'b') return 'Ⅱ';
-  if (tile === 'A' || tile === 'X') return open ? '┆' : '║';
+  if (tile === 'c') return 'Ⅲ';
+  if (tile === 'A' || tile === 'X' || tile === 'Z') return open ? '┆' : '║';
   if (tile === '~') return '╳';
   if (tile === '^') return isPulseActive(turn + 1) ? '▲' : '△';
   if (tile === 'E') return '✦';
@@ -361,6 +344,9 @@ const styles = StyleSheet.create({
   echoStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   echoDot: { width: 8, height: 8, borderRadius: 8, borderWidth: 1 },
   echoStatusText: { color: '#66778c', fontSize: 8, fontWeight: '800', letterSpacing: 1 },
+  memoryRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#1d2c40', marginTop: 9, paddingTop: 8 },
+  memoryLabel: { color: '#697b90', fontSize: 8, fontWeight: '900', letterSpacing: 1.4 },
+  memoryValue: { color: '#d5ac67', fontSize: 10, fontWeight: '900' },
   boardShell: { padding: 8, backgroundColor: '#070d16', borderWidth: 1, borderColor: '#34465f', shadowColor: '#5edbd5', shadowOpacity: 0.12, shadowRadius: 18 },
   board: { borderWidth: 1, borderColor: '#203047' },
   boardRow: { flexDirection: 'row' },
@@ -416,17 +402,9 @@ const styles = StyleSheet.create({
   failureCard: { width: '100%', maxWidth: 410, backgroundColor: '#17131c', borderWidth: 1, borderColor: '#754052', padding: 28, alignItems: 'center' },
   failureIcon: { color: '#df6678', fontSize: 55, marginBottom: 14 },
   failureText: { color: '#ad929a', fontSize: 13, lineHeight: 20, textAlign: 'center', marginVertical: 22 },
-  sealCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#8f713d', padding: 24, alignItems: 'center' },
+  completeCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#8f713d', padding: 28, alignItems: 'center' },
+  completeText: { color: '#8e9eb3', fontSize: 12, lineHeight: 18, textAlign: 'center', marginVertical: 24 },
   sealRune: { color: '#e1b45e', fontSize: 48, marginVertical: 15, textShadowColor: '#dca84c', textShadowRadius: 12 },
-  sealCategory: { color: '#a986d8', fontSize: 9, fontWeight: '900', letterSpacing: 2.5 },
-  sealPrompt: { color: '#f1e8da', fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center', marginVertical: 18 },
-  answers: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 9 },
-  answer: { width: '48%', minHeight: 52, backgroundColor: '#111d2d', borderWidth: 1, borderColor: '#34465f', alignItems: 'center', justifyContent: 'center', padding: 8 },
-  wrongAnswer: { backgroundColor: '#2b1720', borderColor: '#a34c61' },
-  answerText: { color: '#dce4ed', fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  errorText: { color: '#e27382', fontSize: 11, marginTop: 12 },
-  hintLink: { color: '#74879d', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginTop: 18, textDecorationLine: 'underline' },
-  hintText: { color: '#d2ad6e', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 16 },
   victoryCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#92733c', padding: 28, alignItems: 'center' },
   victoryEchoes: { color: '#6edbd5', fontSize: 28, letterSpacing: 5, marginBottom: 18 },
   victoryTitle: { color: '#f3ebde', fontSize: 28, lineHeight: 35, fontWeight: '900', textAlign: 'center', marginTop: 16 },

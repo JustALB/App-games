@@ -2,9 +2,9 @@
 
 ## Product
 
-Echo Maze: Die Archive is a portrait-first mobile time-loop puzzle game. The player records movement sequences as echoes, then cooperates with those past selves to hold pressure plates, synchronize gates, cross collapsing floors, and time hazardous pulse fields. The experience should feel mysterious, premium, readable, and rewarding rather than like a conventional maze or school worksheet.
+Echo Maze: Die Archive is a portrait-first mobile time-loop puzzle game. The player records movement sequences as echoes, then cooperates with those past selves to hold pressure plates, unlock the route for the next echo, cross collapsing floors, and time hazardous pulse fields. All recorded and current steps consume one shared chamber memory budget, so inefficient early routes reduce the final timeline. The experience should feel mysterious, premium, readable, and rewarding rather than like a conventional maze or school worksheet.
 
-The first playable version contains three authored chambers. Chamber one teaches a persistent echo, chamber two requires two simultaneous echoes, and chamber three combines both with a one-way fragile route and alternating pulse hazard. A contextual reasoning seal closes each chamber.
+The first playable version contains three authored chambers. Chamber one teaches a persistent echo, chamber two forces echo 1 to unlock the route for echo 2, and chamber three creates a strict three-echo chain before a one-way fragile route and alternating pulse hazard. Completing the room forms its seal automatically. Do not add detached quiz or multiple-choice screens to the main path; express reasoning through movement, timing, observation, and spatial rules.
 
 The public test build is committed under `docs/` and served at <https://raw.githack.com/JustALB/App-games/main/docs/index.html>. Regenerate it with `npm run export:web`, copy the contents of `dist/` to `docs/`, and change root-relative asset paths in `docs/index.html` to `./` paths before committing.
 
