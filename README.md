@@ -2,6 +2,8 @@
 
 A mobile maze game where every route challenges both orientation and reasoning.
 
+Play the current web version at <https://justalb.github.io/App-games/>.
+
 ## Development
 
 ```sh
