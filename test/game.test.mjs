@@ -15,6 +15,38 @@ import {
 
 const play = (state, actions) => actions.reduce((current, action) => step(current, action), state);
 
+const canReach = (chamber, targetTile, blockedTiles = new Set()) => {
+  const queue = [chamber.start];
+  const seen = new Set([`${chamber.start.row}:${chamber.start.col}`]);
+  while (queue.length) {
+    const current = queue.shift();
+    if (chamber.map[current.row][current.col] === targetTile) return true;
+    for (const [rowDelta, colDelta] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const next = { row: current.row + rowDelta, col: current.col + colDelta };
+      const tile = chamber.map[next.row]?.[next.col] ?? '#';
+      const key = `${next.row}:${next.col}`;
+      if (tile !== '#' && !blockedTiles.has(tile) && !seen.has(key)) {
+        seen.add(key);
+        queue.push(next);
+      }
+    }
+  }
+  return false;
+};
+
+test('every chamber is rectangular and its required gates cannot be bypassed', () => {
+  for (const chamber of CHAMBERS) {
+    assert.ok(chamber.map.every((row) => row.length === chamber.map[0].length));
+  }
+
+  assert.equal(canReach(CHAMBERS[0], 'E', new Set(['A'])), false);
+  assert.equal(canReach(CHAMBERS[1], 'b', new Set(['A'])), false);
+  assert.equal(canReach(CHAMBERS[1], 'E', new Set(['X'])), false);
+  assert.equal(canReach(CHAMBERS[2], 'b', new Set(['A'])), false);
+  assert.equal(canReach(CHAMBERS[2], 'c', new Set(['X'])), false);
+  assert.equal(canReach(CHAMBERS[2], 'E', new Set(['Z'])), false);
+});
+
 test('chamber 1 teaches one persistent echo', () => {
   let state = createInitialState(0);
   state = recordEcho(play(state, ['up', 'up', 'right', 'right']));
