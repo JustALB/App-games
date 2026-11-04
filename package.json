@@ -2,6 +2,7 @@
   "name": "app-games",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

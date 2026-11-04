@@ -1,10 +1,10 @@
-# Mind Maze project guide
+# Echo Maze project guide
 
 ## Product
 
-Mind Maze: Die Archive is a portrait-first mobile maze game. The player explores procedurally generated labyrinths and must solve varied reasoning gates on the route to the exit. Puzzles include arithmetic, number patterns, logic questions, memory challenges, and future spatial tasks. The experience should feel mysterious, premium, readable, and rewarding rather than like a school worksheet.
+Echo Maze: Die Archive is a portrait-first mobile time-loop puzzle game. The player records movement sequences as echoes, then cooperates with those past selves to hold pressure plates, synchronize gates, cross collapsing floors, and time hazardous pulse fields. The experience should feel mysterious, premium, readable, and rewarding rather than like a conventional maze or school worksheet.
 
-The first playable version is called "Das erste Archiv". Each run creates a new solvable maze and places three puzzle seals on the guaranteed route. Wrong answers count as mistakes; hints are optional; completing the maze shows a run summary.
+The first playable version contains three authored chambers. Chamber one teaches a persistent echo, chamber two requires two simultaneous echoes, and chamber three combines both with a one-way fragile route and alternating pulse hazard. A contextual reasoning seal closes each chamber.
 
 The public test build is committed under `docs/` and served at <https://raw.githack.com/JustALB/App-games/main/docs/index.html>. Regenerate it with `npm run export:web`, copy the contents of `dist/` to `docs/`, and change root-relative asset paths in `docs/index.html` to `./` paths before committing.
 
@@ -14,7 +14,7 @@ The public test build is committed under `docs/` and served at <https://raw.gith
 - Android, iOS, and web should remain supported.
 - Keep pure game generation and puzzle logic in `src/game.ts` so it can be tested without rendering the app.
 - Keep the mobile interface in `App.tsx` until navigation or the number of screens justifies splitting it.
-- Prefer deterministic seeded generation so failures can be reproduced.
+- Keep chamber layouts authored and their intended action sequences covered by tests. New procedural elements must remain deterministic so failures can be reproduced.
 - Do not add accounts, ads, analytics, payments, or backend services without an explicit product decision.
 
 ## Visual direction
@@ -37,4 +37,4 @@ For interface changes, also start the web version and verify that the page and J
 npm run web -- --port 8081
 ```
 
-When changing maze generation, test many seeds and ensure the exit and all puzzle gates remain reachable. When changing puzzle generation, ensure every puzzle has exactly one correct answer and unique choices.
+When changing chamber logic, test complete intended action sequences plus closed-gate, trap, reset, and timing failures. When changing seal questions, ensure every question has exactly one correct answer and unique choices.

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Mind Maze: Die Archive",
-    "slug": "mind-maze-die-archive",
+    "name": "Echo Maze: Die Archive",
+    "slug": "echo-maze-die-archive",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
