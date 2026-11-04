@@ -1,7 +1,9 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  ImageBackground,
   Modal,
   Pressable,
   SafeAreaView,
@@ -38,6 +40,7 @@ export default function App() {
   const [selectedLevel, setSelectedLevel] = useState(0);
   const [phase, setPhase] = useState<Phase>('intro');
   const [game, setGame] = useState(() => createInitialState(0));
+  const boardShake = useRef(new Animated.Value(0)).current;
 
   const boardWidth = Math.min(width - 24, height < 700 ? 340 : 420);
   const cellSize = Math.floor(boardWidth / game.chamber.map[0].length);
@@ -70,6 +73,15 @@ export default function App() {
 
   const perform = (action: Action) => {
     const next = step(game, action);
+    if (next === game) {
+      boardShake.setValue(0);
+      Animated.sequence([
+        Animated.timing(boardShake, { toValue: 5, duration: 45, useNativeDriver: true }),
+        Animated.timing(boardShake, { toValue: -4, duration: 55, useNativeDriver: true }),
+        Animated.timing(boardShake, { toValue: 0, duration: 45, useNativeDriver: true }),
+      ]).start();
+      return;
+    }
     setGame(next);
     if (next.status === 'complete') setPhase('complete');
   };
@@ -86,10 +98,11 @@ export default function App() {
   };
 
   return (
-    <LinearGradient colors={['#03060c', '#0a1422', '#05070d']} style={styles.root}>
-      <StatusBar style="light" />
-      <View style={[styles.glow, styles.glowCyan]} />
-      <View style={[styles.glow, styles.glowViolet]} />
+    <ImageBackground source={require('./assets/archive-background.png')} style={styles.root} resizeMode="cover">
+      <LinearGradient colors={['rgba(2,6,12,0.78)', 'rgba(5,14,26,0.72)', 'rgba(3,6,13,0.88)']} style={styles.root}>
+        <StatusBar style="light" />
+        <View style={[styles.glow, styles.glowCyan]} />
+        <View style={[styles.glow, styles.glowViolet]} />
 
       {phase === 'intro' ? (
         <SafeAreaView style={styles.full}>
@@ -162,17 +175,17 @@ export default function App() {
               </View>
             </View>
 
-            <View style={styles.boardShell}>
+            <Animated.View style={[styles.boardShell, { transform: [{ translateX: boardShake }] }]}>
+              <View style={styles.boardHeader}>
+                <Text style={styles.boardHeaderText}>⌁ ZEITARCHIV · KAMMER {String(game.chamber.id).padStart(2, '0')}</Text>
+                <Text style={styles.boardHeaderRune}>✦</Text>
+              </View>
               <View style={[styles.board, { width: cellSize * game.chamber.map[0].length }]}>
                 {game.chamber.map.map((row, rowIndex) => (
                   <View key={rowIndex} style={styles.boardRow}>
                     {[...row].map((tile, colIndex) => {
                       const point = { row: rowIndex, col: colIndex };
                       const key = pointKey(point);
-                      const echoesHere = echoPositions
-                        .map((echo, index) => ({ echo, index }))
-                        .filter(({ echo }) => pointKey(echo) === key);
-                      const isPlayer = pointKey(game.player) === key;
                       const collapsed = game.collapsed.has(key);
                       const openGate =
                         (tile === 'A' && activePlates.has('a')) ||
@@ -198,17 +211,17 @@ export default function App() {
                           <Text style={[styles.tileSymbol, tile === '^' && isPulseActive(game.turn + 1) && styles.danger]}>
                             {tileSymbol(tile as Tile, openGate, collapsed, game.turn)}
                           </Text>
-                          {echoesHere.map(({ index }) => (
-                            <Text key={index} style={[styles.echoPlayer, { color: echoColors[index] }]}>◇</Text>
-                          ))}
-                          {isPlayer && <Text style={styles.player}>◆</Text>}
                         </View>
                       );
                     })}
                   </View>
                 ))}
+                {echoPositions.map((position, index) => (
+                  <MovingEntity key={`echo-${index}`} point={position} cellSize={cellSize} color={echoColors[index]} echo />
+                ))}
+                <MovingEntity point={game.player} cellSize={cellSize} color="#ffd67f" />
               </View>
-            </View>
+            </Animated.View>
 
             <View style={styles.legend}>
               <Legend symbol="◇" text="Echo" color={echoColors[0]} />
@@ -313,7 +326,8 @@ export default function App() {
           </View>
         </View>
       </Modal>
-    </LinearGradient>
+      </LinearGradient>
+    </ImageBackground>
   );
 }
 
@@ -343,113 +357,139 @@ function MoveButton({ label, onPress, style, special = false, disabled = false }
   return <Pressable accessibilityRole="button" accessibilityLabel={special ? 'Zeit abwarten' : `Bewegen ${label}`} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.moveButton, style, special && styles.waitButton, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.moveText, special && styles.waitText]}>{label}</Text></Pressable>;
 }
 
+function MovingEntity({ point, cellSize, color, echo = false }: { point: { row: number; col: number }; cellSize: number; color: string; echo?: boolean }) {
+  const position = useRef(new Animated.ValueXY({ x: point.col * cellSize, y: point.row * cellSize })).current;
+
+  useEffect(() => {
+    Animated.spring(position, {
+      toValue: { x: point.col * cellSize, y: point.row * cellSize },
+      speed: 28,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start();
+  }, [cellSize, point.col, point.row, position]);
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.movingEntity, { width: cellSize, height: cellSize, transform: position.getTranslateTransform() }]}>
+      <View style={[echo ? styles.entityAura : styles.playerAura, echo && { borderColor: color }]} />
+      <Text style={[echo ? styles.echoPlayer : styles.player, { color }]}>{echo ? '◇' : '◆'}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#03060c' },
   full: { flex: 1 },
-  glow: { position: 'absolute', width: 280, height: 280, borderRadius: 999, opacity: 0.1 },
-  glowCyan: { backgroundColor: '#43d6cf', top: -170, right: -100 },
-  glowViolet: { backgroundColor: '#8f67dc', bottom: -170, left: -100 },
+  glow: { position: 'absolute', width: 330, height: 330, borderRadius: 999, opacity: 0.13 },
+  glowCyan: { backgroundColor: '#22d7df', top: -190, right: -110 },
+  glowViolet: { backgroundColor: '#925ce8', bottom: -190, left: -120 },
   intro: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 26 },
-  echoMark: { width: 150, height: 82, alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
-  echoRune: { position: 'absolute', fontSize: 68, opacity: 0.5 },
-  echoCore: { color: '#f2c46f', fontSize: 46, textShadowColor: '#e5a94d', textShadowRadius: 16 },
-  eyebrow: { color: '#5dded8', fontSize: 10, fontWeight: '900', letterSpacing: 3.5 },
-  logo: { color: '#f5eddf', fontSize: 52, lineHeight: 48, fontWeight: '900', letterSpacing: 7, textAlign: 'center', marginTop: 11 },
-  tagline: { color: '#97a6ba', fontSize: 15, lineHeight: 23, maxWidth: 360, textAlign: 'center', marginTop: 20 },
-  levelPicker: { width: '100%', maxWidth: 410, minHeight: 58, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#2d4059', backgroundColor: '#091321', marginTop: 22 },
-  pickerButton: { width: 52, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', backgroundColor: '#101d2e' },
+  echoMark: { width: 150, height: 82, alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
+  echoRune: { position: 'absolute', fontSize: 70, opacity: 0.68, textShadowColor: '#65e7e3', textShadowRadius: 22 },
+  echoCore: { color: '#ffd47f', fontSize: 48, textShadowColor: '#f1a93f', textShadowRadius: 24 },
+  eyebrow: { color: '#79f2ec', fontSize: 10, fontWeight: '900', letterSpacing: 4, textShadowColor: '#1fbdb8', textShadowRadius: 8 },
+  logo: { color: '#fff7e8', fontSize: 54, lineHeight: 49, fontWeight: '900', letterSpacing: 8, textAlign: 'center', marginTop: 11, textShadowColor: '#000', textShadowRadius: 14 },
+  tagline: { color: '#c2ccda', fontSize: 15, lineHeight: 23, maxWidth: 360, textAlign: 'center', marginTop: 18, textShadowColor: '#02050a', textShadowRadius: 8 },
+  levelPicker: { width: '100%', maxWidth: 410, minHeight: 64, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(113,217,219,0.38)', backgroundColor: 'rgba(6,17,30,0.84)', marginTop: 22, borderRadius: 14, overflow: 'hidden', shadowColor: '#37d7d1', shadowOpacity: 0.16, shadowRadius: 16 },
+  pickerButton: { width: 54, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(27,52,72,0.7)' },
   pickerArrow: { color: '#6edbd5', fontSize: 30, lineHeight: 32 },
   pickerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
   pickerIndex: { color: '#b58aee', fontSize: 9, fontWeight: '900', letterSpacing: 1.8 },
-  pickerName: { color: '#e8dfd1', fontSize: 13, fontWeight: '800', marginTop: 5, textAlign: 'center' },
-  featureLine: { width: '100%', maxWidth: 430, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#25344a', marginVertical: 22, paddingVertical: 15 },
+  pickerName: { color: '#fff2da', fontSize: 13, fontWeight: '800', marginTop: 5, textAlign: 'center' },
+  featureLine: { width: '100%', maxWidth: 430, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(129,154,187,0.25)', backgroundColor: 'rgba(4,12,22,0.38)', marginVertical: 22, paddingVertical: 15 },
   feature: { flex: 1, alignItems: 'center', paddingHorizontal: 5 },
   featureNumber: { color: '#b58aee', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  featureText: { color: '#8290a4', fontSize: 10, lineHeight: 14, textAlign: 'center', marginTop: 7 },
-  primaryButton: { width: '100%', maxWidth: 410, minHeight: 58, backgroundColor: '#d7aa5b', borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#d7aa5b', shadowOpacity: 0.25, shadowRadius: 18 },
+  featureText: { color: '#aab7c9', fontSize: 10, lineHeight: 14, textAlign: 'center', marginTop: 7 },
+  primaryButton: { width: '100%', maxWidth: 410, minHeight: 60, backgroundColor: '#e7b65e', borderWidth: 1, borderColor: '#ffda8c', borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#f0b852', shadowOpacity: 0.38, shadowRadius: 22, elevation: 8 },
   primaryText: { color: '#10131b', fontSize: 12, fontWeight: '900', letterSpacing: 1.8 },
   primaryArrow: { position: 'absolute', right: 21, color: '#10131b', fontSize: 20 },
-  gameScreen: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 26 },
-  header: { width: '100%', maxWidth: 450, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  chapter: { color: '#58d7d1', fontSize: 9, fontWeight: '900', letterSpacing: 2.5 },
-  title: { color: '#f2e9dc', fontSize: 20, fontWeight: '800', marginTop: 4 },
-  smallButton: { width: 38, height: 38, borderWidth: 1, borderColor: '#314058', alignItems: 'center', justifyContent: 'center' },
-  smallButtonText: { color: '#8c9bb0', fontSize: 23 },
-  timelineCard: { width: '100%', maxWidth: 450, backgroundColor: '#091220', borderWidth: 1, borderColor: '#24354d', padding: 11, marginBottom: 10 },
+  gameScreen: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 30 },
+  header: { width: '100%', maxWidth: 450, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 },
+  chapter: { color: '#6fe7e1', fontSize: 9, fontWeight: '900', letterSpacing: 2.5, textShadowColor: '#167c7b', textShadowRadius: 6 },
+  title: { color: '#fff4e2', fontSize: 21, fontWeight: '900', marginTop: 4, textShadowColor: '#020407', textShadowRadius: 8 },
+  smallButton: { width: 40, height: 40, borderWidth: 1, borderColor: 'rgba(115,164,190,0.45)', backgroundColor: 'rgba(7,17,29,0.78)', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  smallButtonText: { color: '#b4c5d8', fontSize: 23 },
+  timelineCard: { width: '100%', maxWidth: 450, backgroundColor: 'rgba(4,13,24,0.48)', borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(96,166,192,0.32)', paddingHorizontal: 8, paddingVertical: 12, marginBottom: 8 },
   timelineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   timelineLabel: { color: '#77889d', fontSize: 8, fontWeight: '900', letterSpacing: 1.8 },
   turnCount: { color: '#d5ac67', fontSize: 12, fontWeight: '900' },
   timeline: { flexDirection: 'row', gap: 3, marginVertical: 9 },
-  tick: { height: 4, flex: 1, backgroundColor: '#1d2b3f' },
-  tickPast: { backgroundColor: '#4eaaa7' },
-  tickNow: { backgroundColor: '#f0c36f', height: 7, marginTop: -1.5 },
+  tick: { height: 4, flex: 1, backgroundColor: '#1c2d43', borderRadius: 4 },
+  tickPast: { backgroundColor: '#46c9c2' },
+  tickNow: { backgroundColor: '#ffd378', height: 8, marginTop: -2, shadowColor: '#ffc45f', shadowOpacity: 0.8, shadowRadius: 6 },
   echoStatusRow: { flexDirection: 'row', gap: 18 },
   echoStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   echoDot: { width: 8, height: 8, borderRadius: 8, borderWidth: 1 },
   echoStatusText: { color: '#66778c', fontSize: 8, fontWeight: '800', letterSpacing: 1 },
   memoryRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#1d2c40', marginTop: 9, paddingTop: 8 },
   memoryLabel: { color: '#697b90', fontSize: 8, fontWeight: '900', letterSpacing: 1.4 },
-  memoryValue: { color: '#d5ac67', fontSize: 10, fontWeight: '900' },
-  boardShell: { padding: 8, backgroundColor: '#070d16', borderWidth: 1, borderColor: '#34465f', shadowColor: '#5edbd5', shadowOpacity: 0.12, shadowRadius: 18 },
-  board: { borderWidth: 1, borderColor: '#203047' },
+  memoryValue: { color: '#f0c56e', fontSize: 10, fontWeight: '900' },
+  boardShell: { alignItems: 'center', backgroundColor: 'transparent', shadowColor: '#45dcd5', shadowOpacity: 0.16, shadowRadius: 22, elevation: 5 },
+  boardHeader: { width: '100%', height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 5 },
+  boardHeaderText: { color: '#7895a9', fontSize: 8, fontWeight: '900', letterSpacing: 1.8 },
+  boardHeaderRune: { color: '#e9b960', fontSize: 13, textShadowColor: '#e9a943', textShadowRadius: 8 },
+  board: { backgroundColor: 'transparent', overflow: 'hidden', position: 'relative' },
   boardRow: { flexDirection: 'row' },
   cell: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  floor: { backgroundColor: '#09111d', borderWidth: 0.5, borderColor: '#142136' },
-  wall: { backgroundColor: '#162437', borderWidth: 0.5, borderColor: '#20334b', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 2 },
-  plate: { backgroundColor: '#29251d', borderColor: '#8c713e', borderWidth: 1 },
-  gate: { backgroundColor: '#342928', borderColor: '#a16c57', borderWidth: 1 },
-  openGate: { backgroundColor: '#102723', borderColor: '#4bb5a7', borderWidth: 1 },
-  fragile: { backgroundColor: '#211a1d', borderColor: '#7a4e4b', borderWidth: 1 },
-  collapsed: { backgroundColor: '#020306', borderColor: '#0b0d12' },
-  pulseHot: { backgroundColor: '#351b26', borderColor: '#a84d62', borderWidth: 1 },
-  pulseSafe: { backgroundColor: '#13282d', borderColor: '#458a91', borderWidth: 1 },
-  exit: { backgroundColor: '#332b1c', borderColor: '#c99c4f', borderWidth: 1 },
-  tileSymbol: { color: '#8c9bb0', fontSize: 15, fontWeight: '900' },
-  player: { position: 'absolute', color: '#f2c46f', fontSize: 20, textShadowColor: '#f2b950', textShadowRadius: 10, zIndex: 4 },
-  echoPlayer: { position: 'absolute', fontSize: 21, fontWeight: '900', textShadowColor: '#62ddd7', textShadowRadius: 8, zIndex: 3 },
+  floor: { backgroundColor: 'rgba(8,31,43,0.94)', shadowColor: '#4bc9cf', shadowOpacity: 0.18, shadowRadius: 4 },
+  wall: { backgroundColor: 'transparent' },
+  plate: { backgroundColor: 'rgba(77,57,21,0.96)', borderColor: '#e7b458', borderWidth: 1.4, shadowColor: '#efb950', shadowOpacity: 0.65, shadowRadius: 7, elevation: 4 },
+  gate: { backgroundColor: 'rgba(67,28,39,0.96)', borderColor: '#d37574', borderWidth: 1.4, shadowColor: '#d85d70', shadowOpacity: 0.45, shadowRadius: 6 },
+  openGate: { backgroundColor: 'rgba(12,61,57,0.86)', borderColor: '#55e0cf', borderWidth: 1.2, shadowColor: '#42dfcf', shadowOpacity: 0.55, shadowRadius: 7 },
+  fragile: { backgroundColor: 'rgba(59,28,33,0.92)', borderColor: '#d77a69', borderWidth: 1.2 },
+  collapsed: { backgroundColor: 'rgba(2,3,6,0.86)', borderColor: '#0b0d12' },
+  pulseHot: { backgroundColor: 'rgba(83,24,43,0.96)', borderColor: '#ff657e', borderWidth: 1.3, shadowColor: '#ff466b', shadowOpacity: 0.7, shadowRadius: 7 },
+  pulseSafe: { backgroundColor: 'rgba(16,55,61,0.94)', borderColor: '#58bac0', borderWidth: 1.2 },
+  exit: { backgroundColor: 'rgba(83,62,21,0.96)', borderColor: '#ffd16e', borderWidth: 1.5, shadowColor: '#ffd16e', shadowOpacity: 0.85, shadowRadius: 10, elevation: 5 },
+  tileSymbol: { color: '#afc0d2', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3 },
+  movingEntity: { position: 'absolute', left: 0, top: 0, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
+  playerAura: { position: 'absolute', width: 25, height: 25, borderRadius: 20, backgroundColor: 'rgba(255,196,86,0.18)', borderWidth: 1, borderColor: 'rgba(255,214,128,0.55)', shadowColor: '#ffc55f', shadowOpacity: 0.9, shadowRadius: 10 },
+  player: { color: '#ffe09a', fontSize: 19, textShadowColor: '#f5ac36', textShadowRadius: 12 },
+  entityAura: { position: 'absolute', width: 24, height: 24, borderRadius: 20, borderWidth: 1, opacity: 0.55 },
+  echoPlayer: { fontSize: 21, fontWeight: '900', textShadowColor: '#62ddd7', textShadowRadius: 10 },
   danger: { color: '#f07777' },
-  legend: { flexDirection: 'row', width: '100%', maxWidth: 420, justifyContent: 'space-around', marginTop: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', maxWidth: 420, justifyContent: 'center', gap: 6, marginTop: 10 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 5, paddingVertical: 3 },
   legendSymbol: { fontSize: 14, fontWeight: '900' },
   legendText: { color: '#6f7f94', fontSize: 9 },
-  guidance: { maxWidth: 420, color: '#94a2b5', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 12, minHeight: 35 },
+  guidance: { width: '100%', maxWidth: 420, color: '#b8c4d3', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 10, minHeight: 43, paddingHorizontal: 12, paddingVertical: 7, textShadowColor: '#010308', textShadowRadius: 5 },
   syncGuidance: { color: '#e2bd79', fontWeight: '800' },
   controlArea: { width: '100%', maxWidth: 440, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18, marginTop: 8 },
   dpad: { width: 156, height: 156, position: 'relative' },
-  moveButton: { position: 'absolute', width: 48, height: 48, backgroundColor: '#111c2c', borderWidth: 1, borderColor: '#35465e', alignItems: 'center', justifyContent: 'center', borderRadius: 3 },
+  moveButton: { position: 'absolute', width: 48, height: 48, backgroundColor: 'rgba(14,30,47,0.94)', borderWidth: 1, borderColor: '#4a6885', alignItems: 'center', justifyContent: 'center', borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 7, elevation: 4 },
   moveText: { color: '#d5dce6', fontSize: 22 },
   up: { left: 54, top: 0 },
   left: { left: 2, top: 54 },
   wait: { left: 54, top: 54 },
   right: { right: 2, top: 54 },
   down: { left: 54, top: 108 },
-  waitButton: { backgroundColor: '#251d32', borderColor: '#73569a' },
+  waitButton: { backgroundColor: 'rgba(47,30,65,0.95)', borderColor: '#976bc4' },
   waitText: { color: '#b990eb' },
   pressed: { opacity: 0.6, transform: [{ scale: 0.96 }] },
   actionColumn: { flex: 1, maxWidth: 235, gap: 10 },
-  echoButton: { minHeight: 58, backgroundColor: '#10272b', borderWidth: 1, borderColor: '#3b9692', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 3 },
+  echoButton: { minHeight: 62, backgroundColor: 'rgba(11,48,52,0.94)', borderWidth: 1, borderColor: '#47bdb7', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 14, shadowColor: '#46d7d0', shadowOpacity: 0.22, shadowRadius: 12, elevation: 4 },
   echoButtonIcon: { color: '#5de4de', fontSize: 29 },
   echoButtonTitle: { color: '#d9f3f1', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   echoButtonSub: { color: '#65918f', fontSize: 9, marginTop: 3 },
   disabled: { opacity: 0.3 },
   resetRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  resetText: { color: '#718096', fontSize: 9, textDecorationLine: 'underline' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(1,3,8,0.93)', alignItems: 'center', justifyContent: 'center', padding: 22 },
-  briefingCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#3a4b64', padding: 26, alignItems: 'center' },
+  resetText: { color: '#91a6bd', fontSize: 9, textDecorationLine: 'underline' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(1,4,10,0.84)', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  briefingCard: { width: '100%', maxWidth: 430, backgroundColor: 'rgba(7,18,31,0.97)', borderWidth: 1, borderColor: 'rgba(99,188,199,0.52)', borderRadius: 18, padding: 26, alignItems: 'center', shadowColor: '#4bdad4', shadowOpacity: 0.22, shadowRadius: 24, elevation: 10 },
   modalIndex: { color: '#5ddbd5', fontSize: 9, fontWeight: '900', letterSpacing: 2.8, textAlign: 'center' },
   modalRune: { color: '#a980dd', fontSize: 34, letterSpacing: 8, marginVertical: 20 },
   modalTitle: { color: '#f3ebde', fontSize: 27, lineHeight: 33, fontWeight: '900', textAlign: 'center' },
   modalSubtitle: { color: '#9679bc', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
-  briefingRule: { width: '100%', borderLeftWidth: 2, borderLeftColor: '#d4a757', backgroundColor: '#111d2c', padding: 15, marginVertical: 22 },
+  briefingRule: { width: '100%', borderLeftWidth: 3, borderLeftColor: '#e7b65e', backgroundColor: 'rgba(18,35,53,0.85)', borderRadius: 9, padding: 15, marginVertical: 22 },
   briefingRuleText: { color: '#aab6c5', fontSize: 13, lineHeight: 20 },
   briefingMeta: { color: '#66778d', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 22 },
-  failureCard: { width: '100%', maxWidth: 410, backgroundColor: '#17131c', borderWidth: 1, borderColor: '#754052', padding: 28, alignItems: 'center' },
+  failureCard: { width: '100%', maxWidth: 410, backgroundColor: 'rgba(30,15,26,0.97)', borderWidth: 1, borderColor: '#9b4b65', borderRadius: 18, padding: 28, alignItems: 'center' },
   failureIcon: { color: '#df6678', fontSize: 55, marginBottom: 14 },
   failureText: { color: '#ad929a', fontSize: 13, lineHeight: 20, textAlign: 'center', marginVertical: 22 },
-  completeCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#8f713d', padding: 28, alignItems: 'center' },
+  completeCard: { width: '100%', maxWidth: 430, backgroundColor: 'rgba(8,20,32,0.97)', borderWidth: 1, borderColor: '#b38a42', borderRadius: 18, padding: 28, alignItems: 'center', shadowColor: '#e6b65a', shadowOpacity: 0.24, shadowRadius: 24 },
   completeText: { color: '#8e9eb3', fontSize: 12, lineHeight: 18, textAlign: 'center', marginVertical: 24 },
   sealRune: { color: '#e1b45e', fontSize: 48, marginVertical: 15, textShadowColor: '#dca84c', textShadowRadius: 12 },
-  victoryCard: { width: '100%', maxWidth: 430, backgroundColor: '#0d1726', borderWidth: 1, borderColor: '#92733c', padding: 28, alignItems: 'center' },
+  victoryCard: { width: '100%', maxWidth: 430, backgroundColor: 'rgba(8,20,32,0.97)', borderWidth: 1, borderColor: '#b88d45', borderRadius: 18, padding: 28, alignItems: 'center', shadowColor: '#e6b65a', shadowOpacity: 0.25, shadowRadius: 24 },
   victoryEchoes: { color: '#6edbd5', fontSize: 28, letterSpacing: 5, marginBottom: 18 },
   victoryTitle: { color: '#f3ebde', fontSize: 28, lineHeight: 35, fontWeight: '900', textAlign: 'center', marginTop: 16 },
   victoryText: { color: '#8f9db0', fontSize: 13, lineHeight: 20, textAlign: 'center', marginVertical: 24 },

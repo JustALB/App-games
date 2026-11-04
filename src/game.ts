@@ -217,12 +217,12 @@ const levelNames = [
 const hazardPatterns: Array<Array<'~' | '^' | 'Q'>> = [
   [], ['~'], ['^'], ['Q'], ['~', '^'], ['Q', '~'], ['^', 'Q'], ['~', 'Q', '^'],
 ];
-const NO_WAIT_LEVELS = new Set([7, 8, 9, 10, 13, 15, 16, 18, 20, 23, 24, 25, 26, 27, 28, 30]);
+const NO_WAIT_LEVELS = new Set([7, 8, 9, 10, 15, 16, 23, 24, 26, 28, 30]);
 
 const createSpec = (name: string, index: number): ChamberSpec => {
   const id = index + 1;
   const echoes: 1 | 2 | 3 = id <= 6 ? 1 : id <= 18 ? 2 : 3;
-  const width = [11, 13, 15][id % 3];
+  const width = [13, 15, 17][id % 3];
   const maxLength = Math.min(4, Math.floor(width / 2) - 1);
   const directions = Array.from({ length: echoes }, (_, echoIndex) => ((id + echoIndex) % 2 ? -1 : 1) as -1 | 1);
   const branchLengths = Array.from({ length: echoes }, (_, echoIndex) => 2 + ((id + echoIndex * 2) % (maxLength - 1)));
@@ -237,13 +237,13 @@ const createSpec = (name: string, index: number): ChamberSpec => {
     directions,
     branchLengths,
     hazards: pattern.slice(0, Math.min(pattern.length, 1 + Math.floor(id / 8))),
-    decoys: id < 7 ? 0 : id < 19 ? 1 : 2,
+    decoys: id < 7 ? 2 : id < 19 ? 3 : 4,
     memorySlack,
   };
 };
 
 const buildChamber = (spec: ChamberSpec): Chamber => {
-  const rows = spec.echoes === 1 ? 9 : spec.echoes === 2 ? 13 : 15;
+  const rows = spec.echoes === 1 ? 11 : spec.echoes === 2 ? 15 : 17;
   const center = Math.floor(spec.width / 2);
   const start = { row: rows - 2, col: center };
   const grid = Array.from({ length: rows }, () => Array(spec.width).fill('#'));
@@ -272,17 +272,18 @@ const buildChamber = (spec: ChamberSpec): Chamber => {
   });
 
   const decoyRows = hazardRows.filter((row) => grid[row][center] === '.');
-  for (let index = 0; index < spec.decoys && index < decoyRows.length; index += 1) {
-    const row = decoyRows[(spec.id + index) % decoyRows.length];
-    const direction = ((spec.id + index) % 2 ? -1 : 1);
-    for (let offset = 1; offset <= 2; offset += 1) grid[row][center + direction * offset] = '.';
+  const decoyCandidates = decoyRows.flatMap((row) => [-1, 1].map((direction) => ({ row, direction })));
+  for (let index = 0; index < spec.decoys && index < decoyCandidates.length; index += 1) {
+    const candidate = decoyCandidates[(spec.id * 2 + index * 3) % decoyCandidates.length];
+    const length = 2 + ((spec.id + index) % Math.max(2, Math.floor(spec.width / 2) - 2));
+    for (let offset = 1; offset <= length; offset += 1) grid[candidate.row][center + candidate.direction * offset] = '.';
   }
 
   grid[start.row][start.col] = 'S';
   grid[1][center] = 'E';
   const tier = spec.echoes === 1 ? 'ERINNERUNG' : spec.echoes === 2 ? 'SYNCHRONISATION' : 'PARADOXON';
   const hazardText = spec.hazards.length ? ' Taktfelder und brüchige Schritte verändern die kürzeste Route.' : '';
-  const echoCycleLength = spec.id < 11 ? null : spec.echoes === 2 ? 10 : DEFAULT_ECHO_CYCLE_LENGTH;
+  const echoCycleLength = spec.id < 11 ? null : spec.echoes === 2 ? 14 : 18;
   const cycleText = echoCycleLength ? ` Nach ${echoCycleLength} Zügen springen alle Echos an den Anfang ihrer Spur zurück.` : '';
   const allowWait = !NO_WAIT_LEVELS.has(spec.id);
   const movementText = allowWait ? '' : ' Stillstand ist instabil: Nutze Seitennischen und Rückwege, um Echos zu synchronisieren.';
@@ -307,7 +308,7 @@ const buildChamber = (spec: ChamberSpec): Chamber => {
   const longestTimeline = Math.max(...solved.solution.map((actions) => actions.length));
   return {
     ...base,
-    maxTurns: longestTimeline + Math.min(3, spec.memorySlack),
+    maxTurns: Math.min(20, longestTimeline + Math.min(3, spec.memorySlack)),
     memoryBudget: solved.optimalMemory + spec.memorySlack,
     optimalMemory: solved.optimalMemory,
     solution: solved.solution,

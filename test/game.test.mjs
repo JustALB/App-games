@@ -19,6 +19,19 @@ import {
 const PLATES = ['a', 'b', 'c'];
 const GATES = ['A', 'X', 'Z'];
 const play = (state, actions) => actions.reduce((current, action) => step(current, action), state);
+const countWrongTurnDeadEnds = (chamber) => {
+  let count = 0;
+  for (let row = 0; row < chamber.map.length; row += 1) {
+    for (let col = 0; col < chamber.map[row].length; col += 1) {
+      if (chamber.map[row][col] !== '.') continue;
+      const exits = [[-1, 0], [1, 0], [0, -1], [0, 1]].filter(([rowDelta, colDelta]) =>
+        chamber.map[row + rowDelta]?.[col + colDelta] !== '#',
+      ).length;
+      if (exits === 1) count += 1;
+    }
+  }
+  return count;
+};
 
 const canReach = (chamber, targetTile, blockedTiles = new Set()) => {
   const queue = [chamber.start];
@@ -44,6 +57,8 @@ test('the campaign contains 30 distinct, rectangular chambers', () => {
   assert.equal(new Set(CHAMBERS.map((chamber) => chamber.map.join('\n'))).size, 30);
   for (const chamber of CHAMBERS) {
     assert.ok(chamber.map.every((row) => row.length === chamber.map[0].length), `level ${chamber.id} is rectangular`);
+    assert.ok(chamber.map.length >= 11 && chamber.map[0].length >= 13, `level ${chamber.id} uses the expanded board`);
+    assert.ok(countWrongTurnDeadEnds(chamber) >= 2, `level ${chamber.id} contains real wrong turns`);
     const flat = chamber.map.join('');
     assert.equal([...flat].filter((tile) => tile === 'S').length, 1, `level ${chamber.id} has one start`);
     assert.equal([...flat].filter((tile) => tile === 'E').length, 1, `level ${chamber.id} has one exit`);
@@ -118,7 +133,7 @@ test('cycle echoes rewind together and replay their recorded route', () => {
 
 test('movement-only chambers require real synchronization detours', () => {
   const movementOnly = CHAMBERS.filter((chamber) => !chamber.allowWait);
-  assert.equal(movementOnly.length, 16);
+  assert.equal(movementOnly.length, 11);
   const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
   let reversals = 0;
   for (const chamber of movementOnly) {
