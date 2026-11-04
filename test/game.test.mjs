@@ -31,6 +31,10 @@ test('chamber 2 forces echo 1 to unlock the route for echo 2', () => {
 
   let state = createInitialState(1);
   state = recordEcho(play(state, ['up', 'up']));
+  const bypassAttempt = play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right', 'right', 'up']);
+  assert.deepEqual(bypassAttempt.player, { row: 3, col: 9 });
+  assert.equal(bypassAttempt.status, 'playing');
+
   state = recordEcho(play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'right', 'right', 'right']));
   state = play(state, ['right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'wait', 'up', 'right', 'right', 'right', 'right']);
   assert.deepEqual([...getActivePlates(state)], ['a', 'b']);
@@ -47,6 +51,10 @@ test('chamber 3 builds a three-echo dependency chain within one memory budget', 
   assert.deepEqual(blockedAtDoubleGate.player, { row: 4, col: 6 });
 
   state = recordEcho(play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'right', 'right', 'right', 'right']));
+  const thirdGateBypass = play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'right', 'right', 'right', 'right', 'right', 'up']);
+  assert.deepEqual(thirdGateBypass.player, { row: 3, col: 11 });
+  assert.equal(thirdGateBypass.status, 'playing');
+
   state = play(state, ['right', 'right', 'right', 'right', 'right', 'up', 'up', 'up', 'up', 'up', 'wait', 'up', 'up', 'wait', 'wait', 'up', 'right', 'right', 'right', 'right', 'right']);
   assert.deepEqual([...getActivePlates(state)], ['a', 'b', 'c']);
   assert.equal(state.status, 'complete');
