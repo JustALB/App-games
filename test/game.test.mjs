@@ -4,6 +4,9 @@ import test from 'node:test';
 import {
   CHAMBERS,
   createInitialState,
+  DEFAULT_ECHO_CYCLE_LENGTH,
+  echoPosition,
+  getActivePlates,
   isPulseActive,
   memoryUsed,
   recordEcho,
@@ -90,6 +93,27 @@ test('the campaign contains all hazard and timing variations', () => {
   assert.ok(campaign.includes('Q'), 'phase gates exist');
   assert.equal(isPulseActive(7), true);
   assert.equal(isPulseActive(8), false);
+  assert.equal(CHAMBERS.filter((chamber) => chamber.echoMode === 'cycle').length, 20);
+  assert.ok(CHAMBERS.every((chamber) => chamber.maxTurns <= 20), 'each mobile loop stays short');
+});
+
+test('cycle echoes rewind together and replay their recorded route', () => {
+  const path = [
+    { row: 4, col: 2 },
+    { row: 3, col: 2 },
+    { row: 2, col: 2 },
+  ];
+  assert.deepEqual(echoPosition(path, DEFAULT_ECHO_CYCLE_LENGTH - 1, 'cycle'), path[2]);
+  assert.deepEqual(echoPosition(path, DEFAULT_ECHO_CYCLE_LENGTH, 'cycle'), path[0]);
+  assert.deepEqual(echoPosition(path, DEFAULT_ECHO_CYCLE_LENGTH + 1, 'cycle'), path[1]);
+
+  let state = createInitialState(10);
+  state = recordEcho(play(state, state.chamber.solution[0]));
+  state = recordEcho(play(state, state.chamber.solution[1]));
+  state = play(state, Array(state.chamber.echoCycleLength - 1).fill('wait'));
+  assert.deepEqual([...getActivePlates(state)].sort(), ['a', 'b']);
+  state = step(state, 'wait');
+  assert.deepEqual([...getActivePlates(state)], [], 'the rewind closes both echo plates together');
 });
 
 test('inefficient recordings reduce later turns and resets remain safe', () => {

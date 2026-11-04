@@ -9,6 +9,8 @@ export type Chamber = {
   subtitle: string;
   lesson: string;
   tier: string;
+  echoMode: 'hold' | 'cycle';
+  echoCycleLength: number | null;
   map: string[];
   maxTurns: number;
   maxEchoes: number;
@@ -52,6 +54,7 @@ const DELTAS: Record<Action, Point> = {
 const ACTIONS: Action[] = ['up', 'left', 'right', 'down', 'wait'];
 const PLATES: Tile[] = ['a', 'b', 'c'];
 const GATES: Tile[] = ['A', 'X', 'Z'];
+export const DEFAULT_ECHO_CYCLE_LENGTH = 14;
 
 export const pointKey = ({ row, col }: Point) => `${row}:${col}`;
 export const samePoint = (left: Point, right: Point) => left.row === right.row && left.col === right.col;
@@ -71,12 +74,13 @@ const createStateForChamber = (chamber: Chamber): GameState => ({
   failureReason: null,
 });
 
-export function echoPosition(path: Point[], turn: number) {
-  return path[Math.min(turn, path.length - 1)];
+export function echoPosition(path: Point[], turn: number, mode: Chamber['echoMode'] = 'hold', cycleLength = DEFAULT_ECHO_CYCLE_LENGTH) {
+  const playbackTurn = mode === 'cycle' ? turn % cycleLength : turn;
+  return path[Math.min(playbackTurn, path.length - 1)];
 }
 
 export function getEchoPositions(state: GameState, turn = state.turn) {
-  return state.echoes.map((path) => echoPosition(path, turn));
+  return state.echoes.map((path) => echoPosition(path, turn, state.chamber.echoMode, state.chamber.echoCycleLength ?? DEFAULT_ECHO_CYCLE_LENGTH));
 }
 
 export function getActivePlates(state: GameState, player = state.player, turn = state.turn) {
@@ -275,14 +279,18 @@ const buildChamber = (spec: ChamberSpec): Chamber => {
   grid[1][center] = 'E';
   const tier = spec.echoes === 1 ? 'ERINNERUNG' : spec.echoes === 2 ? 'SYNCHRONISATION' : 'PARADOXON';
   const hazardText = spec.hazards.length ? ' Taktfelder und brüchige Schritte verändern die kürzeste Route.' : '';
+  const echoCycleLength = spec.id < 11 ? null : spec.echoes === 2 ? 10 : DEFAULT_ECHO_CYCLE_LENGTH;
+  const cycleText = echoCycleLength ? ` Nach ${echoCycleLength} Zügen springen alle Echos an den Anfang ihrer Spur zurück.` : '';
   const base: Chamber = {
     id: spec.id,
     name: spec.name,
     subtitle: spec.echoes === 1 ? 'Eine Spur formt den Weg.' : spec.echoes === 2 ? 'Die zweite Spur braucht die erste.' : 'Jede Vergangenheit öffnet die nächste.',
-    lesson: `${spec.echoes === 1 ? 'Platziere dein Echo auf Platte Ⅰ.' : `Baue die Torkette ${PLATES.slice(0, spec.echoes).map((_, i) => ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]).join(' → ')} in der richtigen Reihenfolge.`}${hazardText}`,
+    lesson: `${spec.echoes === 1 ? 'Platziere dein Echo auf Platte Ⅰ.' : `Baue die Torkette ${PLATES.slice(0, spec.echoes).map((_, i) => ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]).join(' → ')} in der richtigen Reihenfolge.`}${hazardText}${cycleText}`,
     tier,
+    echoMode: spec.id >= 11 ? 'cycle' : 'hold',
+    echoCycleLength,
     map: grid.map((row) => row.join('')),
-    maxTurns: 50,
+    maxTurns: 80,
     maxEchoes: spec.echoes,
     memoryBudget: 999,
     optimalMemory: 0,

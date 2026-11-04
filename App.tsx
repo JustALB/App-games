@@ -45,6 +45,9 @@ export default function App() {
   const currentTurnLimit = turnLimit(game);
   const usedMemory = memoryUsed(game);
   const timeExpired = game.turn >= currentTurnLimit;
+  const echoCycleRemaining = game.chamber.echoCycleLength
+    ? game.chamber.echoCycleLength - (game.turn % game.chamber.echoCycleLength)
+    : null;
 
   const startGame = () => {
     setGame(createInitialState(selectedLevel));
@@ -76,7 +79,7 @@ export default function App() {
 
       {phase === 'intro' ? (
         <SafeAreaView style={styles.full}>
-          <View style={styles.intro}>
+          <ScrollView contentContainerStyle={styles.intro} bounces={false}>
             <View style={styles.echoMark}>
               <Text style={[styles.echoRune, { color: echoColors[1], left: 12 }]}>◇</Text>
               <Text style={[styles.echoRune, { color: echoColors[0], right: 12 }]}>◇</Text>
@@ -106,7 +109,7 @@ export default function App() {
               <Text style={styles.primaryText}>ERINNERUNG BEGINNEN</Text>
               <Text style={styles.primaryArrow}>→</Text>
             </Pressable>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       ) : (
         <SafeAreaView style={styles.full}>
@@ -123,7 +126,7 @@ export default function App() {
 
             <View style={styles.timelineCard}>
               <View style={styles.timelineHeader}>
-                <Text style={styles.timelineLabel}>AKTUELLE ZEITLINIE</Text>
+                <Text style={styles.timelineLabel}>{echoCycleRemaining ? `ECHO-RÜCKLAUF IN ${echoCycleRemaining}` : 'AKTUELLE ZEITLINIE'}</Text>
                 <Text style={[styles.turnCount, timeExpired && styles.danger]}>{game.turn} / {currentTurnLimit}</Text>
               </View>
               <View style={styles.timeline}>
@@ -242,7 +245,7 @@ export default function App() {
             <Text style={styles.modalTitle}>{game.chamber.name}</Text>
             <Text style={styles.modalSubtitle}>{game.chamber.subtitle}</Text>
             <View style={styles.briefingRule}><Text style={styles.briefingRuleText}>{game.chamber.lesson}</Text></View>
-            <Text style={styles.briefingMeta}>{game.chamber.memoryBudget} GESAMTZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}</Text>
+            <Text style={styles.briefingMeta}>{game.chamber.memoryBudget} GESAMTZÜGE · {game.chamber.maxEchoes} {game.chamber.maxEchoes === 1 ? 'ECHO' : 'ECHOS'}{game.chamber.echoCycleLength ? ` · ${game.chamber.echoCycleLength}ER RÜCKLAUF` : ''}</Text>
             <Pressable onPress={() => setPhase('playing')} style={styles.primaryButton}>
               <Text style={styles.primaryText}>KAMMER BETRETEN</Text><Text style={styles.primaryArrow}>→</Text>
             </Pressable>
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
   glow: { position: 'absolute', width: 280, height: 280, borderRadius: 999, opacity: 0.1 },
   glowCyan: { backgroundColor: '#43d6cf', top: -170, right: -100 },
   glowViolet: { backgroundColor: '#8f67dc', bottom: -170, left: -100 },
-  intro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 26 },
+  intro: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 26 },
   echoMark: { width: 150, height: 82, alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
   echoRune: { position: 'absolute', fontSize: 68, opacity: 0.5 },
   echoCore: { color: '#f2c46f', fontSize: 46, textShadowColor: '#e5a94d', textShadowRadius: 16 },
